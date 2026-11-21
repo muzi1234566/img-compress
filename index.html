@@ -184,6 +184,25 @@ body{
 .save:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
 
 /* ───── 页脚 ───── */
+.up{flex:none;margin-top:9px;animation:in .5s var(--ease) .08s both}
+.up-btn{
+  width:100%;border:1.5px solid var(--blue);background:transparent;color:var(--blue);
+  font-family:inherit;font-size:15.5px;font-weight:600;
+  padding:13px 20px;border-radius:var(--r-pill);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  transition:transform .11s var(--ease),background .2s var(--ease),opacity .2s var(--ease);
+}
+.up-btn:active:not(:disabled){transform:scale(.975);background:var(--blue-soft)}
+.up-btn:disabled{opacity:.34;cursor:default}
+.up-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+.up-tip{
+  text-align:center;font-size:11.5px;color:var(--muted2);
+  margin-top:7px;line-height:1.45;
+}
+.up-tip.ok{color:#1a8a3e;font-weight:500}
+.up-tip.bad{color:#c9302c;font-weight:500}
+
 .foot{
   flex:none;text-align:center;font-size:11px;color:var(--muted2);
   letter-spacing:.02em;padding-top:1px;
@@ -286,6 +305,14 @@ body{
 </section>
 
 <button class="save" id="saveBtn" disabled>保存头像</button>
+
+<div class="up" id="upBox">
+  <button class="up-btn" id="upBtn" disabled>
+    <svg viewBox="0 0 24 24"><path d="M12 19V7"/><path d="m7.5 11.5 4.5-4.5 4.5 4.5"/><path d="M5 4.5h14"/></svg>
+    直接传到地球小博士
+  </button>
+  <div class="up-tip" id="upTip">不用去网站点头像，这里一次搞定</div>
+</div>
 
 <div class="foot">Power by <b>Muzi</b></div>
 
@@ -912,6 +939,8 @@ body{
 
       result = { blob:r.blob, url:url, file:file, size:r.blob.size, dim:r.dim };
       saveBtn.disabled = false;
+      var ub = document.getElementById('upBtn');
+      if (ub) ub.disabled = false;
     }catch(e){
       toast('处理失败，换一张试试');
     }finally{
@@ -933,6 +962,9 @@ body{
     progress(null);
     tip(isHeif(file) ? '解码 HEIC…' : '读取中…');
     saveBtn.disabled = true;
+    var ub0 = document.getElementById('upBtn');
+    if (ub0) ub0.disabled = true;
+    setTip('不用去网站点头像，这里一次搞定');
 
     var src;
     try{
@@ -1003,6 +1035,8 @@ body{
     toast('已保存');
   }
 
+  document.getElementById('upBtn').addEventListener('click', directUpload);
+
   saveBtn.addEventListener('click', function(){
     if (!result) return;
     if (isIOS && !isStandalone){
@@ -1020,6 +1054,103 @@ body{
   $('ios').addEventListener('click', function(e){
     if (e.target === this) this.classList.remove('open');
   });
+
+  /* ═══════════ 直传地球小博士 ═══════════ */
+  var UP_URL = 'http://exam.dilidasai.com/server/user/uploadHeadPortrait';
+  var upBtn = null, upTip = null;
+
+  function setTip(text, cls){
+    if (!upTip) upTip = document.getElementById('upTip');
+    upTip.textContent = text;
+    upTip.className = 'up-tip' + (cls ? ' ' + cls : '');
+  }
+
+  function readToken(){
+    // 令牌在 cookie: vue_admin_template_token
+    var m = document.cookie.match(/(?:^|;\s*)vue_admin_template_token=([^;]+)/);
+    var t = m ? decodeURIComponent(m[1]) : '';
+    if (!t){
+      try{ t = localStorage.getItem('vue_admin_template_token') || ''; }catch(e){}
+    }
+    return (t || '').trim();
+  }
+
+  function askToken(){
+    var cur = readToken();
+    var v = prompt(
+      '要直接传到地球小博士，需要一次登录令牌。\n\n' +
+      '在手机浏览器打开 exam.geodoctor.cn 并登录，然后地址栏输入这段并回车：\n' +
+      'javascript:prompt("复制这串",document.cookie)\n\n' +
+      '把 vue_admin_template_token= 后面那串（eyJ 开头）粘贴到这里：',
+      cur
+    );
+    if (!v) return '';
+    v = v.trim().replace(/^Bearer\s+/i, '');
+    // 允许用户整段粘 cookie
+    var mm = v.match(/vue_admin_template_token=([^;]+)/);
+    if (mm) v = decodeURIComponent(mm[1]);
+    try{ localStorage.setItem('_gd_token', v); }catch(e){}
+    return v;
+  }
+
+  async function directUpload(){
+    if (!result) return;
+    var btn = upBtn || (upBtn = document.getElementById('upBtn'));
+    if (btn.disabled) return;
+
+    var token = readToken();
+    if (!token){
+      try{ token = localStorage.getItem('_gd_token') || ''; }catch(e){}
+    }
+    if (!token) token = askToken();
+    if (!token){ setTip('没填令牌，已取消', 'bad'); return; }
+
+    if (result.blob.size > 51200){
+      setTip('这张 ' + human(result.blob.size) + '，超过 50KB，重新选一次', 'bad');
+      return;
+    }
+
+    btn.disabled = true;
+    setTip('正在上传…');
+
+    try{
+      var fd = new FormData();
+      fd.append('file', result.file, result.file.name || 'avatar.jpg');
+
+      var ctrl = new AbortController();
+      var to = setTimeout(function(){ ctrl.abort(); }, 45000);
+
+      var res = await fetch(UP_URL, {
+        method: 'POST',
+        headers: { 'Qd-Authorization': 'Bearer ' + token },
+        body: fd,
+        signal: ctrl.signal
+      });
+      clearTimeout(to);
+
+      var txt = await res.text();
+      var j = null;
+      try{ j = JSON.parse(txt); }catch(e){}
+
+      if (j && String(j.code) === '200'){
+        setTip('上传成功！刷新网站就能看到头像', 'ok');
+        toast('上传成功');
+      } else if (j && String(j.code) === '401'){
+        try{ localStorage.removeItem('_gd_token'); }catch(e){}
+        setTip('令牌失效了，点按钮重新填一次', 'bad');
+      } else {
+        setTip('服务端回：' + (j ? (j.message || JSON.stringify(j)) : txt.slice(0, 60)), 'bad');
+      }
+    }catch(err){
+      if (err && err.name === 'AbortError'){
+        setTip('超时。这张图可能还是偏大，换成「极稳」再试', 'bad');
+      } else {
+        setTip('请求失败：' + (err.message || err) + '（可改用「保存头像」手动传）', 'bad');
+      }
+    }finally{
+      btn.disabled = false;
+    }
+  }
 
   /* ═══════════ 尺寸变化 ═══════════ */
   var rt;
