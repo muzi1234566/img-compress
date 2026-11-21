@@ -361,7 +361,7 @@ body{
     <svg viewBox="0 0 24 24"><path d="M12 19V7"/><path d="m7.5 11.5 4.5-4.5 4.5 4.5"/><path d="M5 4.5h14"/></svg>
     直接传到地球小博士
   </button>
-  <div class="up-tip" id="upTip">不用去网站点头像，这里一次搞定</div>
+  <div class="up-tip" id="upTip">压缩 → 保存</div>
 </div>
 
 <div class="foot">Power by <b>Muzi</b></div>
@@ -371,7 +371,7 @@ body{
 <div class="tkmask" id="tkMask"></div>
 <div class="tksheet" id="tkSheet">
   <div class="grab"></div>
-  <h2>粘贴登录令牌</h2>
+  <h2>一键上传：粘一次代码</h2>
   <p class="tklead">
     <b>方法一（电脑，最快）</b><br>
     电脑浏览器登录 exam.geodoctor.cn，按 F12 → Console，粘贴下面这行回车，把结果发到手机：<br>
@@ -1013,8 +1013,7 @@ body{
 
       result = { blob:r.blob, url:url, file:file, size:r.blob.size, dim:r.dim };
       saveBtn.disabled = false;
-      var ub = document.getElementById('upBtn');
-      if (ub) ub.disabled = false;
+      refreshUpBtn();
     }catch(e){
       toast('处理失败，换一张试试');
     }finally{
@@ -1038,7 +1037,6 @@ body{
     saveBtn.disabled = true;
     var ub0 = document.getElementById('upBtn');
     if (ub0) ub0.disabled = true;
-    setTip('不用去网站点头像，这里一次搞定');
 
     var src;
     try{
@@ -1109,7 +1107,13 @@ body{
     toast('已保存');
   }
 
-  document.getElementById('upBtn').addEventListener('click', directUpload);
+  document.getElementById('upBtn').addEventListener('click', function(){
+    if (!CAN_UPLOAD){
+      setTip('浏览器不让 HTTPS 页面访问那个 HTTP 接口。请用下载的 HTML 文件打开');
+      return;
+    }
+    directUpload();
+  });
   document.getElementById('tkOk').addEventListener('click', acceptToken);
   document.getElementById('tkCancel').addEventListener('click', function(){
     closeTokenSheet(); setTip('没填令牌，已取消', 'bad');
@@ -1146,6 +1150,21 @@ body{
     'http://exam.dilidasai.com/server/user/uploadHeadPortrait'
   ];
   var upBtn = null, upTip = null;
+
+  // HTTPS 页面无法请求 HTTP 接口（混合内容），file:// 可以
+  var CAN_UPLOAD = (location.protocol === 'file:' || location.protocol === 'http:');
+
+  function refreshUpBtn(){
+    var b = document.getElementById('upBtn');
+    if (!b) return;
+    if (!CAN_UPLOAD){
+      b.textContent = '直传要用下载版（这里被浏览器拦）';
+      b.disabled = false;   // 可点，点了给解释
+      setTip('在线版只能压缩保存。要直传，用下发的 HTML 文件打开');
+      return;
+    }
+    b.disabled = !result;
+  }
 
   function setTip(text, cls){
     if (!upTip) upTip = document.getElementById('upTip');
