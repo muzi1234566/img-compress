@@ -364,23 +364,32 @@ body{
   /* ═══════════ 依赖按需加载（多源 + 完整性校验） ═══════════ */
   var loaded = {};
 
+  // 本页所在目录（兼容根站 / 子目录 / file:// 三种部署）
+  var SITE_BASE = (function(){
+    var u = location.pathname;
+    if (/\/index\.html$/.test(u)) return u.replace(/index\.html$/, '');
+    if (/\/$/.test(u)) return u;
+    return u.replace(/[^/]*$/, '');
+  })();
+  var HEIF_BASE = SITE_BASE + 'lib/heif/';
+
   // 多源：优先走带压缩的 CDN，最后回落自家
   var SOURCES = {
     'libheif': [
       'https://cdn.jsdelivr.net/npm/libheif-js@1.23.5/libheif-wasm/libheif-bundle.js',
       'https://unpkg.com/libheif-js@1.23.5/libheif-wasm/libheif-bundle.js',
       'https://cdn.staticfile.org/libheif-js/1.23.5/libheif-wasm/libheif-bundle.js',
-      'lib/libheif-bundle.js'
+      SITE_BASE + 'lib/libheif-bundle.js'
     ],
     'pako': [
       'https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/browser/pako.umd.min.js',
       'https://unpkg.com/pako@2.1.0/dist/browser/pako.umd.min.js',
-      'lib/pako.min.js'
+      SITE_BASE + 'lib/pako.min.js'
     ],
     'utif': [
       'https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js',
       'https://unpkg.com/utif@3.1.0/UTIF.js',
-      'lib/UTIF.js'
+      SITE_BASE + 'lib/UTIF.js'
     ]
   };
 
@@ -464,7 +473,7 @@ body{
 
   // 最终保底：分块拉取 base64 再拼装（抗弱网断流）
   async function loadHeifChunks(){
-    var base = 'lib/heif/';
+    var base = HEIF_BASE;
     var mf = await fetchText(base + 'manifest.json', 3);
     var lens = JSON.parse(mf).parts;
     var b64 = '';
