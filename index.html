@@ -1140,7 +1140,11 @@ body{
   });
 
   /* ═══════════ 直传地球小博士 ═══════════ */
-  var UP_URL = 'http://exam.dilidasai.com/server/user/uploadHeadPortrait';
+  // 混合内容：HTTPS 页面不能调 HTTP 接口，所以优先 HTTPS
+  var UP_URLS = [
+    'https://exam.dilidasai.com/server/user/uploadHeadPortrait',
+    'http://exam.dilidasai.com/server/user/uploadHeadPortrait'
+  ];
   var upBtn = null, upTip = null;
 
   function setTip(text, cls){
@@ -1213,13 +1217,25 @@ body{
       var ctrl = new AbortController();
       var to = setTimeout(function(){ ctrl.abort(); }, 45000);
 
-      var res = await fetch(UP_URL, {
-        method: 'POST',
-        headers: { 'Qd-Authorization': 'Bearer ' + token },
-        body: fd,
-        signal: ctrl.signal
-      });
+      var res = null, lastErr = null;
+      for (var ui = 0; ui < UP_URLS.length; ui++){
+        try{
+          res = await fetch(UP_URLS[ui], {
+            method: 'POST',
+            headers: { 'Qd-Authorization': 'Bearer ' + token },
+            body: fd,
+            signal: ctrl.signal
+          });
+          break;
+        }catch(e){
+          lastErr = e;
+          // 重建 FormData（body 已被消费）
+          fd = new FormData();
+          fd.append('file', result.file, result.file.name || 'avatar.jpg');
+        }
+      }
       clearTimeout(to);
+      if (!res) throw lastErr || new Error('fetch failed');
 
       var txt = await res.text();
       var j = null;
@@ -1237,8 +1253,10 @@ body{
     }catch(err){
       if (err && err.name === 'AbortError'){
         setTip('超时。这张图可能还是偏大，换成「极稳」再试', 'bad');
+      } else if (/Failed to fetch|NetworkError|Load failed/i.test(err.message || '')){
+        setTip('网络被拦住了。改用「保存头像」，去网站手动传', 'bad');
       } else {
-        setTip('请求失败：' + (err.message || err) + '（可改用「保存头像」手动传）', 'bad');
+        setTip('请求失败：' + (err.message || err), 'bad');
       }
     }finally{
       btn.disabled = false;
